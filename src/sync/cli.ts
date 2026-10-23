@@ -27,6 +27,7 @@ function main(): void {
   const skills = new Map<string, SkillFile[]>();
   for (const path of paths) {
     const [, name, ...rest] = path.split("/");
+    if (rest.length === 0) continue; // a file directly under skills/ is not a skill
     const files = skills.get(name) ?? [];
     files.push({ path: rest.join("/"), content: git(["show", `${version}:${path}`]) });
     skills.set(name, files);

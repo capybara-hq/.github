@@ -7,9 +7,14 @@ import { test } from "node:test";
 import { type SkillFile, skillHash, stampFrontmatter, stampSkill } from "./hash.ts";
 
 const FIXTURE_SHA256 = "cef1a6784ece247858b9144b07a58ac47ffa8c51520e2b1d817421a3d73090dd";
+const STAMPED_FIXTURE_SHA256 = "7571c66c01170d67878bb2d691f6c7980ae762412c65e1a602077baa2f9b5a4b";
 const fixtureDir = new URL("./fixtures/skill/", import.meta.url);
 const fixture = (): SkillFile[] =>
   ["SKILL.md", "extra.md"].map((path) => ({ path, content: readFileSync(new URL(path, fixtureDir), "utf8") }));
+
+const stampedDir = new URL("./fixtures/stamped/", import.meta.url);
+const stampedFixture = (): SkillFile[] =>
+  ["SKILL.md", "extra.md"].map((path) => ({ path, content: readFileSync(new URL(path, stampedDir), "utf8") }));
 
 const stamped = (sha256: string): SkillFile[] =>
   fixture().map((f) => (f.path === "SKILL.md" ? { ...f, content: stampFrontmatter(f.content, { version: "v1.0.0", sha256 }) } : f));
@@ -53,6 +58,27 @@ test("stamping keeps existing lines and replaces an existing metadata block", ()
   assert.match(twice, /^ {2}sha256: bb$/m);
   assert.equal(twice.match(/^metadata:/gm)?.length, 1);
   assert.equal(twice.match(/^# Synced from/gm)?.length, 1);
+});
+
+test("a sha256-looking line in the body does not break the fixed point", () => {
+  const files = fixture().map((f) => (f.path === "SKILL.md" ? { ...f, content: `${f.content}\n  sha256: abc\n` } : f));
+  const result = stampSkill(files, "v1.0.0");
+  assert.equal(skillHash(result.files), result.sha256);
+  assert.ok(result.files[0].content.includes("\n  sha256: abc\n"));
+});
+
+test("a CRLF copy of a stamped skill hashes to its recorded sha256", () => {
+  const { files, sha256 } = stampSkill(fixture(), "v1.0.0");
+  const crlf = files.map((f) => ({ ...f, content: f.content.replaceAll("\n", "\r\n") }));
+  assert.equal(skillHash(crlf), sha256);
+});
+
+test("stamped fixture hash equals STAMPED_FIXTURE_SHA256 and its recorded sha256", () => {
+  const files = stampedFixture();
+  const recorded = /^ {2}sha256: ([0-9a-f]+)$/m.exec(files[0].content)?.[1];
+  assert.equal(skillHash(files), STAMPED_FIXTURE_SHA256);
+  assert.equal(recorded, STAMPED_FIXTURE_SHA256);
+  assert.deepEqual(stampSkill(fixture(), "v1.0.0").files, files);
 });
 
 test("fixture hash equals FIXTURE_SHA256", () => {

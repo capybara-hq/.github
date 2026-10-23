@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 export const SKILL_SOURCE = "capybara-hq/.github";
 const COMMENT = "# Synced from capybara-hq/.github. Edit the source there, then run sync.";
-const SHA_LINE = /^ {2}sha256: [0-9a-f]*$/m;
+const SHA_LINE = /^ {2}sha256: [0-9a-f]*$/;
 
 export interface SkillFile {
   /** Relative to the skill directory, `/` separators. */
@@ -10,16 +10,25 @@ export interface SkillFile {
   content: string;
 }
 
+/** Deletes every `  sha256: <hex>` line (with its newline) inside the frontmatter only. */
+function withoutShaLines(content: string): string {
+  const match = /^---\n([\s\S]*?\n)?---(?=\n|$)/.exec(content);
+  if (!match) return content;
+  const kept = match[0].split("\n").filter((line) => !SHA_LINE.test(line));
+  return kept.join("\n") + content.slice(match[0].length);
+}
+
 /**
- * Content hash of a skill directory. Files are sorted by path; the `sha256:` line of the
- * stamped metadata in SKILL.md is ignored so that stamping does not change the hash.
+ * Content hash of a skill directory (exact algorithm: hash-spec in the contributor-workflow
+ * plan). CRLF is normalized to LF, files are sorted by path, and in SKILL.md the `sha256:`
+ * lines of the frontmatter are ignored so that stamping does not change the hash.
  */
 export function skillHash(files: SkillFile[]): string {
   const hash = createHash("sha256");
   const sorted = [...files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   for (const file of sorted) {
-    const content = file.path === "SKILL.md" ? file.content.replace(SHA_LINE, "") : file.content;
-    hash.update(`${file.path}\0${content}\0`);
+    const text = file.content.replaceAll("\r\n", "\n");
+    hash.update(`${file.path}\0${file.path === "SKILL.md" ? withoutShaLines(text) : text}\0`);
   }
   return hash.digest("hex");
 }
