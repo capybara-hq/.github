@@ -30,7 +30,7 @@ drafted review they can post with one confirmation.
 `<repo>` is the name in the URL of the remote pointing to `capybara-hq/<repo>` (`git remote -v`).
 
 1. The PR:
-   `gh pr view <N> --repo capybara-hq/<repo> --json number,title,body,url,author,authorAssociation,isCrossRepository,isDraft,state,baseRefName,headRefName,headRefOid,mergeable,mergeStateStatus,reviewDecision,labels,files,commits,reviews,closingIssuesReferences,statusCheckRollup`
+   `gh pr view <N> --repo capybara-hq/<repo> --json number,title,body,url,author,isCrossRepository,isDraft,state,baseRefName,headRefName,headRefOid,mergeable,mergeStateStatus,reviewDecision,labels,files,commits,reviews,closingIssuesReferences,statusCheckRollup`
 2. The diff: `gh pr diff <N> --repo capybara-hq/<repo>` (and `--name-only` for the file list).
 3. The checks: `gh pr checks <N> --repo capybara-hq/<repo>`. Note `ci-ok` and `issue-linked`
    (a commit status). A first-time contributor's CI may wait for a maintainer to approve the run;
