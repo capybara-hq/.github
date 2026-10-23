@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { createClient, type SettingsApi } from "../github.ts";
 import { desired, TEAM_SLUG } from "./desired.ts";
-import { type Actual, type Drift, diffSettings, preflight } from "./diff.ts";
+import { type Actual, type Drift, diffSettings } from "./diff.ts";
+import { ApplyError, applyDrift } from "./apply.ts";
 
 async function gather(api: SettingsApi, repo: string): Promise<Actual> {
   const [labels, rulesets, codeowners, privateReporting, workflows, statuses] = await Promise.all([
@@ -43,34 +44,18 @@ export async function main(argv: string[]): Promise<number> {
     return drift.length > 0 ? 1 : 0;
   }
 
-  const reasons = preflight(have);
-  if (reasons.length > 0) {
-    for (const r of reasons) console.error(`refusing to apply: ${r}`);
+  try {
+    const { refused, steps } = await applyDrift(api, repo, want, have, drift, {
+      prune: flags.includes("--prune"),
+    });
+    for (const r of refused) console.error(`refusing to apply: ${r}`);
+    for (const st of steps) console.log(st);
+    if (refused.length > 0) return 1;
+  } catch (e) {
+    if (!(e instanceof ApplyError)) throw e;
+    for (const st of e.steps) console.log(st);
+    console.error(`apply failed: ${e.message}; rerunning apply is safe`);
     return 1;
-  }
-  const prune = flags.includes("--prune");
-  for (const d of drift) {
-    if (d.kind === "label") {
-      await api.upsertLabel(repo, want.labels.find((l) => l.name === d.name)!);
-    } else if (d.kind === "ruleset") {
-      const rs = want.rulesets.find((r) => r.name === d.name)!;
-      const existing = have.rulesets.find((r) => r.name === d.name);
-      if (existing?.id !== undefined) await api.updateRuleset(repo, existing.id, rs);
-      else await api.createRuleset(repo, rs);
-    } else if (d.kind === "private-reporting") {
-      await api.enablePrivateReporting(repo);
-    } else if (d.kind === "unmanaged-ruleset") {
-      const existing = have.rulesets.find((r) => r.name === d.name);
-      if (!prune || existing?.id === undefined) {
-        console.log(`left in place (use --prune to delete): ${d.name}`);
-        continue;
-      }
-      await api.deleteRuleset(repo, existing.id);
-    } else {
-      console.log(`not written by this script: ${d.name} ${d.detail}`);
-      continue;
-    }
-    console.log(`applied ${d.kind} ${d.name}`);
   }
   return 0;
 }
