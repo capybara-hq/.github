@@ -148,3 +148,24 @@ test("a permission lookup failure for a PR author fails the status without a com
   assert.match(status.description, /permission/);
   assert.ok(!calls.some((c) => c.key === `POST ${API}/repos/${REPO}/issues/5/comments`));
 });
+
+test("pull_request_target evaluates the API's current head SHA and body, not the payload's", async () => {
+  const { gh, calls } = setup({
+    [`GET ${API}/repos/${REPO}/pulls/5`]: { body: { ...rawPR(5, "Closes #12"), head: { sha: "newsha" } } },
+    [`GET ${API}/repos/${REPO}/collaborators/stranger/permission`]: { body: { permission: "read" } },
+    [`GET ${API}/repos/${REPO}/issues/12`]: { body: issue(12, ["accepted"]) },
+    [`POST ${API}/repos/${REPO}/statuses/newsha`]: { status: 201 },
+    [`GET ${comments(5)}`]: { body: [] },
+  });
+  await runGate(
+    {
+      name: "pull_request_target",
+      payload: { action: "synchronize", number: 5, pull_request: { body: "stale, no link", head: { sha: "oldsha" } } },
+      repo: REPO,
+    },
+    gh,
+  );
+  const status = calls.find((c) => c.key.includes("/statuses/"));
+  assert.equal(status?.key, `POST ${API}/repos/${REPO}/statuses/newsha`);
+  assert.equal((status?.body as { state: string }).state, "success");
+});
