@@ -29,6 +29,31 @@ export interface GitHub {
   assign(repo: string, n: number, login: string): Promise<void>;
 }
 
+export type Label = { name: string; color: string; description: string };
+export type Ruleset = { id?: number; name: string; [key: string]: unknown };
+export type RecentStatus = { context: string; state: string; createdAt: string };
+
+/** Repository-settings calls. Separate from `GitHub` so the gate's test fakes stay small. */
+export interface SettingsApi {
+  /** Every ruleset of the repository, each fetched by id (the list endpoint omits `rules`). */
+  getRulesets(repo: string): Promise<Ruleset[]>;
+  createRuleset(repo: string, ruleset: Ruleset): Promise<void>;
+  updateRuleset(repo: string, id: number, ruleset: Ruleset): Promise<void>;
+  deleteRuleset(repo: string, id: number): Promise<void>;
+  getLabels(repo: string): Promise<Label[]>;
+  /** Updates the label when it exists, creates it otherwise. */
+  upsertLabel(repo: string, label: Label): Promise<void>;
+  getTeamId(org: string, slug: string): Promise<number>;
+  /** File text, or null when the file does not exist. */
+  getFile(repo: string, path: string): Promise<string | null>;
+  /** Text of every file directly under `.github/workflows`; empty when the directory is missing. */
+  getWorkflows(repo: string): Promise<string[]>;
+  getPrivateReporting(repo: string): Promise<boolean>;
+  enablePrivateReporting(repo: string): Promise<void>;
+  /** Statuses with this context on the heads of PRs updated in the last 30 days (stops at the first match). */
+  listRecentStatuses(repo: string, context: string): Promise<RecentStatus[]>;
+}
+
 export const markerOf = (name: string) => `<!-- capybara-gate:${name} -->`;
 
 type RawPR = {
@@ -53,7 +78,7 @@ export function createClient(opts: {
   token: string;
   fetch?: typeof fetch;
   apiUrl?: string;
-}): GitHub {
+}): GitHub & SettingsApi {
   const doFetch = opts.fetch ?? fetch;
   const base = opts.apiUrl ?? "https://api.github.com";
 
@@ -119,7 +144,118 @@ export function createClient(opts: {
     return null;
   }
 
+  const decode = (f: { content?: string; encoding?: string }) =>
+    f.encoding === "base64" ? Buffer.from(f.content ?? "", "base64").toString("utf8") : (f.content ?? "");
+
+  const settings: SettingsApi = {
+    async getRulesets(repo) {
+      const list = (await call<{ id: number }[]>("GET", `/repos/${repo}/rulesets?per_page=100`)) ?? [];
+      const full: Ruleset[] = [];
+      for (const r of list) {
+        const one = await call<Ruleset>("GET", `/repos/${repo}/rulesets/${r.id}`);
+        if (one) full.push(one);
+      }
+      return full;
+    },
+
+    async createRuleset(repo, ruleset) {
+      await call("POST", `/repos/${repo}/rulesets`, ruleset);
+    },
+
+    async updateRuleset(repo, id, ruleset) {
+      await call("PUT", `/repos/${repo}/rulesets/${id}`, ruleset);
+    },
+
+    async deleteRuleset(repo, id) {
+      await call("DELETE", `/repos/${repo}/rulesets/${id}`, undefined, [404]);
+    },
+
+    async getLabels(repo) {
+      const out: Label[] = [];
+      for await (const l of paged<{ name: string; color: string; description?: string | null }>(
+        `/repos/${repo}/labels?per_page=100`,
+      )) {
+        out.push({ name: l.name, color: l.color, description: l.description ?? "" });
+      }
+      return out;
+    },
+
+    async upsertLabel(repo, label) {
+      const updated = await call(
+        "PATCH",
+        `/repos/${repo}/labels/${encodeURIComponent(label.name)}`,
+        { color: label.color, description: label.description },
+        [404],
+      );
+      if (updated === null) {
+        // 204 never happens here; null means the label does not exist yet.
+        await call("POST", `/repos/${repo}/labels`, label);
+      }
+    },
+
+    async getTeamId(org, slug) {
+      const team = await call<{ id: number }>("GET", `/orgs/${org}/teams/${slug}`);
+      return team!.id;
+    },
+
+    async getFile(repo, path) {
+      const f = await call<{ content?: string; encoding?: string }>(
+        "GET",
+        `/repos/${repo}/contents/${path}`,
+        undefined,
+        [404],
+      );
+      return f ? decode(f) : null;
+    },
+
+    async getWorkflows(repo) {
+      const dir = await call<{ type: string; path: string }[]>(
+        "GET",
+        `/repos/${repo}/contents/.github/workflows`,
+        undefined,
+        [404],
+      );
+      const out: string[] = [];
+      for (const f of dir ?? []) {
+        if (f.type !== "file") continue;
+        const text = await settings.getFile(repo, f.path);
+        if (text !== null) out.push(text);
+      }
+      return out;
+    },
+
+    async getPrivateReporting(repo) {
+      const r = await call<{ enabled: boolean }>("GET", `/repos/${repo}/private-vulnerability-reporting`);
+      return r?.enabled === true;
+    },
+
+    async enablePrivateReporting(repo) {
+      await call("PUT", `/repos/${repo}/private-vulnerability-reporting`);
+    },
+
+    async listRecentStatuses(repo, context) {
+      const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const prs =
+        (await call<{ updated_at: string; head: { sha: string } }[]>(
+          "GET",
+          `/repos/${repo}/pulls?state=all&sort=updated&direction=desc&per_page=100`,
+        )) ?? [];
+      for (const pr of prs) {
+        if (Date.parse(pr.updated_at) < since) break;
+        const statuses =
+          (await call<{ context: string; state: string; created_at: string }[]>(
+            "GET",
+            `/repos/${repo}/commits/${pr.head.sha}/statuses`,
+          )) ?? [];
+        const hit = statuses.find((s) => s.context === context);
+        if (hit) return [{ context: hit.context, state: hit.state, createdAt: hit.created_at }];
+      }
+      return [];
+    },
+  };
+
   return {
+    ...settings,
     async getPR(repo, n) {
       return toPR((await call<RawPR>("GET", `/repos/${repo}/pulls/${n}`))!);
     },
