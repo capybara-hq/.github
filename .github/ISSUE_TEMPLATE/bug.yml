@@ -1,0 +1,34 @@
+name: Bug report
+description: Something does not work as documented
+labels: [needs-triage, bug]
+body:
+  - type: textarea
+    attributes:
+      label: What happened
+      description: What you saw, including error messages.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps that triggers it.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen instead.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Version or commit
+      description: Release version or commit SHA.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Environment
+      description: OS, Node, Docker, browser or anything else that may matter.
+    validations:
+      required: false
