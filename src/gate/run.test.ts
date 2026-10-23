@@ -78,7 +78,8 @@ test("issues opened without sections adds needs-info and comments once; edited w
     [`POST ${ISSUE_URL}/comments`]: { status: 201 },
   });
   await runGate({ name: "issues", payload: openedPayload("opened", "just a vague idea"), repo: REPO }, opened.gh);
-  assert.deepEqual(opened.calls.find((c) => c.key.endsWith("/labels"))?.body, { labels: ["needs-info"] });
+  const labelBodies = opened.calls.filter((c) => c.key.endsWith("/labels")).map((c) => c.body);
+  assert.deepEqual(labelBodies, [{ labels: ["needs-triage"] }, { labels: ["needs-info"] }]);
   assert.equal(opened.calls.filter((c) => c.key === `POST ${ISSUE_URL}/comments`).length, 1);
   const text = (opened.calls.at(-1)?.body as { body: string }).body;
   assert.ok(text.startsWith("<!-- capybara-gate:issue-format -->"));
@@ -101,7 +102,7 @@ test("issues opened without sections adds needs-info and comments once; edited w
 test("/claim on an accepted unassigned issue assigns the commenter", async () => {
   const { gh, calls } = setup({
     [`GET ${ISSUE_URL}`]: { body: issue(20, ["accepted"]) },
-    [`POST ${ISSUE_URL}/assignees`]: { status: 201 },
+    [`POST ${ISSUE_URL}/assignees`]: { status: 201, body: { assignees: [{ login: "Dev" }] } },
     [`POST ${ISSUE_URL}/comments`]: { status: 201 },
   });
   await runGate(
@@ -115,6 +116,43 @@ test("/claim on an accepted unassigned issue assigns the commenter", async () =>
   assert.deepEqual(calls.find((c) => c.key.endsWith("/assignees"))?.body, { assignees: ["dev"] });
   const reply = (calls.at(-1)?.body as { body: string }).body;
   assert.ok(reply.startsWith("<!-- capybara-gate:claim -->"));
+  assert.match(reply, /Assigned to @dev/);
+});
+
+test("/claim whose assignment did not stick says a maintainer will assign", async () => {
+  const { gh, calls } = setup({
+    [`GET ${ISSUE_URL}`]: { body: issue(20, ["accepted"]) },
+    [`POST ${ISSUE_URL}/assignees`]: { status: 201, body: { assignees: [] } },
+    [`POST ${ISSUE_URL}/comments`]: { status: 201 },
+  });
+  await runGate(
+    {
+      name: "issue_comment",
+      payload: { action: "created", issue: { number: 20 }, comment: { body: "/claim", user: { login: "dev" } } },
+      repo: REPO,
+    },
+    gh,
+  );
+  const reply = (calls.at(-1)?.body as { body: string }).body;
+  assert.match(reply, /@dev could not assign you automatically; a maintainer will assign you/);
+  assert.doesNotMatch(reply, /Assigned to/);
+});
+
+test("issues opened adds needs-triage unless already triaged", async () => {
+  const full = "### What happened\n\nIt broke\n\n### Steps to reproduce\n\n1. run\n\n### Expected behavior\n\nWorks\n\n### Version or commit\n\n1.0";
+  const perm = { [`GET ${API}/repos/${REPO}/collaborators/stranger/permission`]: { status: 404 } };
+  const base = { ...perm, [`GET ${comments(20)}`]: { body: [] } };
+  const plain = setup({ ...base, [`POST ${ISSUE_URL}/labels`]: { body: [] } });
+  await runGate({ name: "issues", payload: openedPayload("opened", full), repo: REPO }, plain.gh);
+  assert.deepEqual(plain.calls.find((c) => c.key.endsWith("/labels"))?.body, { labels: ["needs-triage"] });
+
+  const accepted = setup(base);
+  await runGate({ name: "issues", payload: openedPayload("opened", full, ["accepted"]), repo: REPO }, accepted.gh);
+  assert.ok(!accepted.calls.some((c) => c.key.endsWith("/labels")));
+
+  const edited = setup(base);
+  await runGate({ name: "issues", payload: openedPayload("edited", full), repo: REPO }, edited.gh);
+  assert.ok(!edited.calls.some((c) => c.key.endsWith("/labels")));
 });
 
 test("issue_comment on a PR is ignored", async () => {

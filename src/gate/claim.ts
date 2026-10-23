@@ -17,6 +17,9 @@ export function decideClaim(input: { commenter: string; issue: IssueState }): {
   message: string;
 } {
   const { commenter, issue } = input;
+  if (issue.state === "closed") {
+    return { action: "reply", message: "This issue is closed, so it can't be claimed." };
+  }
   if (!isAccepted(issue.labels)) {
     return {
       action: "reply",

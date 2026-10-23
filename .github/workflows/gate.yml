@@ -1,8 +1,10 @@
 # Reusable issue gate. Callers pass pull_request_target, issues and issue_comment events.
 # This workflow never checks out or executes the caller's code: it checks out only this
 # repository's tools and talks to the GitHub API.
-# Pending runs in a concurrency group are superseded by newer ones. That is safe because every
-# run reads the current PR head and body through the API, never from the event payload.
+# Concurrency is per job, after the job `if:`, so ignored comments never supersede a run. Pending
+# runs in a group are superseded by newer ones. PR and state events share one group per number
+# (safe: every run reads the current PR head and body through the API, never the payload); issue
+# opened/edited format checks use their own group so a state event cannot replace them.
 name: gate
 on:
   workflow_call:
@@ -11,9 +13,6 @@ on:
         type: string
         default: v1
         description: Ref of capybara-hq/.github that provides the gate scripts.
-concurrency:
-  group: capybara-gate-${{ github.event.pull_request.number || github.event.issue.number }}
-  cancel-in-progress: false
 permissions:
   contents: read
   issues: write
@@ -21,6 +20,9 @@ permissions:
   statuses: write
 jobs:
   gate:
+    concurrency:
+      group: capybara-gate-${{ (github.event_name == 'issues' && (github.event.action == 'opened' || github.event.action == 'edited')) && 'format' || 'state' }}-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: false
     # Only /claim comments on issues matter; other comments must not supersede a pending run.
     if: github.event_name != 'issue_comment' || (!github.event.issue.pull_request && contains(github.event.comment.body, '/claim'))
     runs-on: ubuntu-latest

@@ -15,7 +15,8 @@ export type ApplyResult = { refused: string[]; steps: string[] };
 /**
  * Pass 1 writes labels, managed rulesets and private reporting. Pass 2 deletes unmanaged
  * rulesets, only with `prune` and only after pass 1 fully succeeded, so `main` is never
- * left less protected. Preflight runs before any write; reasons mean no write at all.
+ * left less protected. Preflight reasons gate only ruleset writes and unmanaged-ruleset
+ * deletes (`refused` is then non-empty); labels and private reporting are still applied.
  * CODEOWNERS is reported, never written. A failure throws ApplyError with the steps done.
  */
 export async function applyDrift(
@@ -27,7 +28,7 @@ export async function applyDrift(
   opts: { prune: boolean },
 ): Promise<ApplyResult> {
   const refused = preflight(have);
-  if (refused.length > 0) return { refused, steps: [] };
+  const rulesetsAllowed = refused.length === 0;
 
   const steps: string[] = [];
   try {
@@ -35,7 +36,7 @@ export async function applyDrift(
       await api.upsertLabel(repo, want.labels.find((l) => l.name === d.name)!);
       steps.push(`label ${d.name}`);
     }
-    for (const d of drift.filter((x) => x.kind === "ruleset")) {
+    for (const d of drift.filter((x) => rulesetsAllowed && x.kind === "ruleset")) {
       const rs = want.rulesets.find((r) => r.name === d.name)!;
       const id = have.rulesets.find((r) => r.name === d.name)?.id;
       if (id !== undefined) await api.updateRuleset(repo, id, rs);
@@ -46,7 +47,7 @@ export async function applyDrift(
       await api.enablePrivateReporting(repo);
       steps.push("private-reporting");
     }
-    for (const d of drift.filter((x) => x.kind === "unmanaged-ruleset")) {
+    for (const d of drift.filter((x) => rulesetsAllowed && x.kind === "unmanaged-ruleset")) {
       const id = have.rulesets.find((r) => r.name === d.name)?.id;
       if (!opts.prune || id === undefined) {
         steps.push(`left in place (use --prune to delete): ${d.name}`);
@@ -61,5 +62,5 @@ export async function applyDrift(
   for (const d of drift.filter((x) => x.kind === "codeowners")) {
     steps.push(`not written by this script: ${d.name} ${d.detail}`);
   }
-  return { refused: [], steps };
+  return { refused, steps };
 }

@@ -114,3 +114,10 @@ test("getIssue returns null on 404 and throws naming method, path and status oth
   });
   assert.equal(await gh.getIssue("o/r", 4), null);
 });
+
+test("assign returns the resulting assignee logins", async () => {
+  const { fetch } = fakeFetch({
+    [`POST ${API}/repos/o/r/issues/5/assignees`]: { status: 201, body: { assignees: [{ login: "a" }] } },
+  });
+  assert.deepEqual(await createClient({ token: "t", fetch }).assign("o/r", 5, "a"), ["a"]);
+});

@@ -22,6 +22,7 @@ type Payload = {
 };
 
 const WRITE_ACCESS = ["admin", "maintain", "write"];
+const TRIAGE_EXEMPT = ["needs-triage", "accepted", "good first issue", "help wanted"];
 const ISSUE_ACTIONS = ["labeled", "unlabeled", "assigned", "unassigned", "closed", "reopened"];
 
 /** Sets the `issue-linked` status on the PR's head commit and syncs its gate comment. */
@@ -62,6 +63,9 @@ async function checkFormat(gh: GitHub, repo: string, payload: Payload): Promise<
 
   const result = checkIssueFormat(issue.body ?? "");
   const labels = (issue.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
+  if (payload.action === "opened" && !labels.some((l) => TRIAGE_EXEMPT.includes(l))) {
+    await gh.addLabels(repo, issue.number, ["needs-triage"]);
+  }
   if (!result.ok) {
     if (!labels.includes("needs-info")) await gh.addLabels(repo, issue.number, ["needs-info"]);
     await gh.upsertComment(
@@ -84,8 +88,15 @@ async function claim(gh: GitHub, repo: string, payload: Payload): Promise<void> 
   const current = await gh.getIssue(repo, issue.number);
   if (!current) return;
   const decision = decideClaim({ commenter: comment.user.login, issue: current });
-  if (decision.action === "assign") await gh.assign(repo, issue.number, comment.user.login);
-  await gh.addComment(repo, issue.number, "claim", decision.message);
+  let message = decision.message;
+  if (decision.action === "assign") {
+    const login = comment.user.login;
+    const assignees = await gh.assign(repo, issue.number, login);
+    if (!assignees.some((a) => a.toLowerCase() === login.toLowerCase())) {
+      message = `@${login} could not assign you automatically; a maintainer will assign you.`;
+    }
+  }
+  await gh.addComment(repo, issue.number, "claim", message);
 }
 
 export async function runGate(event: GateEvent, gh: GitHub): Promise<void> {

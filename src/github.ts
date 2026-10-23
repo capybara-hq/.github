@@ -26,7 +26,8 @@ export interface GitHub {
   addComment(repo: string, n: number, marker: string, body: string): Promise<void>;
   addLabels(repo: string, n: number, labels: string[]): Promise<void>;
   removeLabel(repo: string, n: number, label: string): Promise<void>;
-  assign(repo: string, n: number, login: string): Promise<void>;
+  /** Assigns the user; returns the issue's resulting assignee logins. */
+  assign(repo: string, n: number, login: string): Promise<string[]>;
 }
 
 export type Label = { name: string; color: string; description: string };
@@ -332,7 +333,12 @@ export function createClient(opts: {
     },
 
     async assign(repo, n, login) {
-      await call("POST", `/repos/${repo}/issues/${n}/assignees`, { assignees: [login] });
+      const res = await call<{ assignees?: { login: string }[] }>(
+        "POST",
+        `/repos/${repo}/issues/${n}/assignees`,
+        { assignees: [login] },
+      );
+      return (res?.assignees ?? []).map((a) => a.login);
     },
   };
 }

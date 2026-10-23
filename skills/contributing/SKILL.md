@@ -11,7 +11,7 @@ rules are in `AGENTS.md` and the skills for each area; read them before changing
 
 ## Rules
 
-- **Run the repository's commands; do not re-implement them.** `pnpm doctor`, `pnpm verify` and
+- **Run the repository's commands; do not re-implement them.** `pnpm doctor:env`, `pnpm verify` and
   `pnpm wt:new` decide what is checked and how; `gh` and `git` do the rest.
 - **Outward actions only after the user agrees**: commenting `/claim`, pushing, opening or editing
   a PR, replying to review threads, requesting reviewers. Show what you are about to run (and the
@@ -32,9 +32,10 @@ rules are in `AGENTS.md` and the skills for each area; read them before changing
 - **Remotes.** The upstream is the remote whose URL points to `capybara-hq/<repo>` (find it with
   `git remote -v`; `<repo>` comes from that URL). If it is `origin`, the user is a core developer
   (confirm with `gh repo view capybara-hq/<repo> --json viewerPermission`: `ADMIN`, `MAINTAIN` or
-  `WRITE`). Otherwise `origin` is their fork and `<fork-owner>` is the owner in its URL. Branches
+  `WRITE`). If the permission is lower, they have no write access: follow the fork step of the
+  `onboarding` skill (`gh repo fork --remote`). Otherwise `origin` is their fork and `<fork-owner>` is the owner in its URL. Branches
   start from `<upstream>/main` and are pushed to `origin`. If no remote points to `capybara-hq`,
-  or `pnpm doctor` fails, follow the `onboarding` skill first.
+  or `pnpm doctor:env` fails, follow the `onboarding` skill first.
 - **The issue gate.** Every PR gets the required status `issue-linked`. It passes for authors
   with write access and for the bots `github-actions[bot]`, `dependabot[bot]`, `renovate[bot]`.
   For everyone else the PR body must close an issue of the same repository with a closing keyword

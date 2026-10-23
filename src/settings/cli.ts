@@ -48,9 +48,12 @@ export async function main(argv: string[]): Promise<number> {
     const { refused, steps } = await applyDrift(api, repo, want, have, drift, {
       prune: flags.includes("--prune"),
     });
-    for (const r of refused) console.error(`refusing to apply: ${r}`);
     for (const st of steps) console.log(st);
-    if (refused.length > 0) return 1;
+    if (refused.length > 0) {
+      console.error("rulesets skipped (not written, unmanaged ones not deleted); reasons:");
+      for (const r of refused) console.error(`  - ${r}`);
+      return 1;
+    }
   } catch (e) {
     if (!(e instanceof ApplyError)) throw e;
     for (const st of e.steps) console.log(st);

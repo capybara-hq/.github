@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 const root = new URL("../", import.meta.url);
 const SKILLS = ["onboarding", "contributing", "reviewing-prs"];
-const ALLOWED_COMMANDS = ["pnpm doctor", "pnpm verify", "pnpm wt:new"];
+const ALLOWED_COMMANDS = ["pnpm doctor:env", "pnpm verify", "pnpm wt:new"];
 
 const read = (name: string): string => readFileSync(new URL(`skills/${name}/SKILL.md`, root), "utf8");
 
@@ -29,9 +29,9 @@ test("every skill has matching name and a description under 1024 chars", () => {
   }
 });
 
-test("no skill mentions a repository-specific command other than pnpm doctor, pnpm verify, pnpm wt:new", () => {
+test("no skill mentions a repository-specific command other than pnpm doctor:env, pnpm verify, pnpm wt:new", () => {
   for (const name of SKILLS) {
-    const commands = read(name).match(/pnpm [a-z:-]+/g) ?? [];
+    const commands = read(name).match(/pnpm [a-z][a-z:-]*/g) ?? [];
     const others = commands.filter((c) => !ALLOWED_COMMANDS.includes(c));
     assert.deepEqual(others, [], `${name}: mentions ${others.join(", ")}`);
   }

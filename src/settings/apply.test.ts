@@ -55,12 +55,14 @@ test("without prune nothing is deleted", async () => {
   assert.ok(r.steps.some((s) => s.startsWith("left in place")));
 });
 
-test("preflight reasons mean zero write calls", async () => {
+test("preflight reasons: no ruleset writes or deletes; labels and private reporting still applied", async () => {
   const h = have({ workflows: [], recentIssueLinked: 0 });
   const { api, calls } = fakeApi();
   const r = await applyDrift(api, "o/r", want, h, diffSettings(want, h), { prune: true });
   assert.equal(r.refused.length, 2);
-  assert.deepEqual(calls, []);
+  assert.ok(calls.includes("upsertLabel"));
+  assert.ok(calls.includes("enablePrivateReporting"));
+  for (const c of ["createRuleset", "updateRuleset", "deleteRuleset"]) assert.ok(!calls.includes(c), c);
 });
 
 test("drift in a shuffled order still deletes last", async () => {

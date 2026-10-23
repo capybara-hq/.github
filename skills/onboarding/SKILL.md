@@ -1,17 +1,17 @@
 ---
 name: onboarding
-description: "Gets a person ready to contribute to a capybara-hq repository: runs pnpm doctor, explains and fixes what fails (only with the user's agreement), sets up the upstream remote or a fork, then gives a short tour of the repository, its rules and skills, the daily flow and open good first issues. Use on first contact with the repository, or when the user says things like 'set up', 'get me set up', 'getting started', 'onboard me', 'I'm new here', 'how do I contribute', 'check my environment' or 'why doesn't my setup work'."
+description: "Gets a person ready to contribute to a capybara-hq repository: runs pnpm doctor:env, explains and fixes what fails (only with the user's agreement), sets up the upstream remote or a fork, then gives a short tour of the repository, its rules and skills, the daily flow and open good first issues. Use on first contact with the repository, or when the user says things like 'set up', 'get me set up', 'getting started', 'onboard me', 'I'm new here', 'how do I contribute', 'check my environment' or 'why doesn't my setup work'."
 ---
 
 # Onboarding
 
-Goal: the person's checkout passes every required item of `pnpm doctor`, and they know how work
+Goal: the person's checkout passes every required item of `pnpm doctor:env`, and they know how work
 is done in this repository. Works the same for core developers (write access) and community
 contributors (working from a fork).
 
 ## Rules
 
-- **Run the repository's commands; do not re-implement them.** `pnpm doctor` decides what is
+- **Run the repository's commands; do not re-implement them.** `pnpm doctor:env` decides what is
   checked. Do not invent your own checks or replace a failing check with a workaround.
 - **Outward actions only after the user agrees**: creating a fork, adding or renaming remotes,
   changing git config, logging in to `gh`. Say exactly what you are about to run and why, then
@@ -24,7 +24,7 @@ contributors (working from a fork).
 
 ## 1. Run doctor
 
-1. Run `pnpm doctor --json` from the repository root.
+1. Run `pnpm doctor:env --json` from the repository root.
 2. If it cannot run at all (no Node, no pnpm, "command not found", missing script), read the
    prerequisites in `README.md` / `AGENTS.md`, tell the user what to install, and stop until they
    have done it. Do not install system tools without their agreement.
@@ -38,7 +38,7 @@ Show the user a short list: every `fail` first, then every `warn`, each with its
 
 Then, for each `fail`:
 
-- If the fix needs no decision (for example installing dependencies), offer `pnpm doctor --fix`,
+- If the fix needs no decision (for example installing dependencies), offer `pnpm doctor:env --fix`,
   which performs only such fixes. Run it after the user agrees.
 - Otherwise show the `fix` command and either run it after the user agrees or let them run it.
   Typical cases:
@@ -49,7 +49,7 @@ Then, for each `fail`:
 `warn` items are optional. Explain what they affect (for example "needed only for the dev stack")
 and let the user decide.
 
-Re-run `pnpm doctor --json` after the fixes. Repeat until no item is `fail`, or until what is left
+Re-run `pnpm doctor:env --json` after the fixes. Repeat until no item is `fail`, or until what is left
 needs the user (then say what is left and stop).
 
 ## 3. Remotes and the kind of contributor

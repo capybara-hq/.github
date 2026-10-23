@@ -47,3 +47,9 @@ test("not accepted issue cannot be claimed", () => {
   assert.equal(r.action, "reply");
   assert.match(r.message, /not accepted yet/);
 });
+
+test("closed issue cannot be claimed", () => {
+  const r = decideClaim({ commenter: "ann", issue: issue({ state: "closed" }) });
+  assert.equal(r.action, "reply");
+  assert.match(r.message, /closed/);
+});

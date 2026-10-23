@@ -20,6 +20,8 @@ template, review, changes, and merge by a maintainer.
 
 ## From issue to merged PR
 
+External PRs are not merged until the CLA bot is live; see each repository's CONTRIBUTING.md.
+
 1. Open an issue with one of the forms (bug or feature). It starts as `needs-triage`.
 2. A maintainer looks at it. If the form is incomplete the issue gets `needs-info`; fill in the
    missing sections. Rejected issues are closed as "not planned" with a one-line reason.
@@ -32,8 +34,8 @@ template, review, changes, and merge by a maintainer.
    assigned to you.
 
 There are no exemptions for small PRs: typo and docs fixes also need an accepted issue.
-Maintainers, and the allowlisted bots (`github-actions[bot]`, `dependabot[bot]`, `renovate[bot]`),
-do not need a linked issue.
+People with write access (core developers and maintainers) and the allowlisted bots
+(`github-actions[bot]`, `dependabot[bot]`, `renovate[bot]`) do not need a linked issue.
 
 ## Who merges
 
@@ -45,8 +47,8 @@ a code owner of the latest push. If you push after an approval, it needs a new o
 
 Every repository provides two `pnpm` scripts:
 
-- `pnpm doctor` checks your environment (tool versions, dependencies, remotes, git identity).
-  `pnpm doctor --fix` performs only fixes that need no decision.
+- `pnpm doctor:env` checks your environment (tool versions, dependencies, remotes, git identity).
+  `pnpm doctor:env --fix` performs only fixes that need no decision.
 - `pnpm verify` is the local equivalent of the required checks for your branch. Run it before
   pushing. Both accept `--json` for machine-readable output.
 
