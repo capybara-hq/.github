@@ -1,0 +1,34 @@
+# Reusable issue gate. Callers pass pull_request_target, issues and issue_comment events.
+# This workflow never checks out or executes the caller's code: it checks out only this
+# repository's tools and talks to the GitHub API.
+name: gate
+on:
+  workflow_call:
+    inputs:
+      tools-ref:
+        type: string
+        default: v1
+        description: Ref of capybara-hq/.github that provides the gate scripts.
+concurrency:
+  group: capybara-gate-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  statuses: write
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: capybara-hq/.github
+          ref: ${{ inputs.tools-ref }}
+          path: .capybara-gate
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node .capybara-gate/src/gate/run.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
