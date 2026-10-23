@@ -24,7 +24,8 @@ contributors (working from a fork).
 
 ## 1. Run doctor
 
-1. Run `pnpm doctor:env --json` from the repository root.
+1. Run `pnpm -s doctor:env --json` from the repository root. Keep the `-s`: without it the script
+   banner on stdout breaks JSON parsing, and `-s` leaves only the JSON.
 2. If it cannot run at all (no Node, no pnpm, "command not found", missing script), read the
    prerequisites in `README.md` / `AGENTS.md`, tell the user what to install, and stop until they
    have done it. Do not install system tools without their agreement.
@@ -49,7 +50,7 @@ Then, for each `fail`:
 `warn` items are optional. Explain what they affect (for example "needed only for the dev stack")
 and let the user decide.
 
-Re-run `pnpm doctor:env --json` after the fixes. Repeat until no item is `fail`, or until what is left
+Re-run `pnpm -s doctor:env --json` after the fixes. Repeat until no item is `fail`, or until what is left
 needs the user (then say what is left and stop).
 
 ## 3. Remotes and the kind of contributor

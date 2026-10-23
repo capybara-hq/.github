@@ -31,7 +31,10 @@ test("every skill has matching name and a description under 1024 chars", () => {
 
 test("no skill mentions a repository-specific command other than pnpm doctor:env, pnpm verify, pnpm wt:new", () => {
   for (const name of SKILLS) {
-    const commands = read(name).match(/pnpm [a-z][a-z:-]*/g) ?? [];
+    // An optional `-s` (silent) flag belongs to the same command, so it is dropped before the allowlist check.
+    const commands = (read(name).match(/pnpm (?:-s )?[a-z][a-z:-]*/g) ?? []).map((c) =>
+      c.replace(/^pnpm -s /, "pnpm "),
+    );
     const others = commands.filter((c) => !ALLOWED_COMMANDS.includes(c));
     assert.deepEqual(others, [], `${name}: mentions ${others.join(", ")}`);
   }

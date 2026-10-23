@@ -78,9 +78,9 @@ Input: an issue number `N` (core developers may also start without one).
 
 ## Verify
 
-1. In the worktree, run `pnpm verify --json`. It prints the same contract as doctor:
+1. In the worktree, run `pnpm -s verify --json`. It prints the same contract as doctor:
    `{ "ok", "checks": [{ "id", "title", "status", "detail", "fix"? }] }`, exit 0 when nothing is
-   `fail`.
+   `fail`. Keep the `-s`: without it the script banner on stdout breaks JSON parsing.
 2. For each `fail`, explain in plain words what broke and where, using `detail` and `fix`. Fix the
    code when the cause is clear and inside the task; ask when it is not. Do not skip, disable or
    weaken a check to make it pass.
