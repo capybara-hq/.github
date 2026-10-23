@@ -1,0 +1,32 @@
+# Tags a release on every push to main. When package.json carries a version without a
+# v<version> tag, creates the immutable v<version> tag and force-moves the major tag v<major>.
+# Tags are lightweight. An existing version tag is never moved.
+name: release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Create and push tags
+        run: |
+          tags=$(node src/release.ts)
+          for tag in $tags; do
+            case "$tag" in
+              v*.*.*) git tag "$tag" && git push origin "$tag" ;;
+              *) git tag -f "$tag" && git push -f origin "$tag" ;;
+            esac
+          done
