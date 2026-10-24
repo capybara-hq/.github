@@ -20,7 +20,11 @@ template, review, changes, and merge by a maintainer.
 
 ## From issue to merged PR
 
-External PRs are not merged until the CLA bot is live; see each repository's CONTRIBUTING.md.
+External PRs are not merged until the CLA is in effect (it is pending legal review; the CLA bot may
+already ask you to sign); see each repository's CONTRIBUTING.md.
+
+Questions and ideas that aren't a bug or a concrete feature request go to
+[Discussions](https://github.com/orgs/capybara-hq/discussions); issues are for work to be done.
 
 1. Open an issue with one of the forms (bug or feature). It starts as `needs-triage`.
 2. A maintainer looks at it. If the form is incomplete the issue gets `needs-info`; fill in the
