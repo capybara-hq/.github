@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Ask a question or share an idea
+    url: https://github.com/orgs/capybara-hq/discussions
+    about: Questions, ideas and help go to Discussions; issues are for bugs and accepted work.
   - name: Report a security vulnerability
     url: https://github.com/capybara-hq/core/security/advisories/new
     about: Please do not open a public issue for security problems.
