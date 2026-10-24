@@ -5,3 +5,5 @@ Consumers call the workflows at the moving tag `@v1`; releases are immutable `v1
 See [profile/README.md](profile/README.md) for the organization profile.
 
 A release (tag) happens only when a merged PR bumps `version` in package.json.
+
+This repository's own `main` is protected like the others: PRs need `ci-ok`, `issue-linked` and a maintainer approval.
