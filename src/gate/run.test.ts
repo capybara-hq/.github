@@ -26,7 +26,7 @@ function setup(table: Record<string, Handler>) {
   return { gh: createClient({ token: "t", fetch: f.fetch }), calls: f.calls };
 }
 
-test("pull_request_target sets failure status and comments", async () => {
+test("a pr-event run sets failure status and comments", async () => {
   const { gh, calls } = setup({
     [`GET ${API}/repos/${REPO}/pulls/5`]: { body: rawPR(5, "No link here") },
     [`GET ${API}/repos/${REPO}/collaborators/stranger/permission`]: { status: 404 },
@@ -34,7 +34,7 @@ test("pull_request_target sets failure status and comments", async () => {
     [`GET ${comments(5)}`]: { body: [] },
     [`POST ${API}/repos/${REPO}/issues/5/comments`]: { status: 201 },
   });
-  await runGate({ name: "pull_request_target", payload: { action: "opened", number: 5 }, repo: REPO }, gh);
+  await runGate({ name: "workflow_run", payload: {}, repo: REPO, prNumber: 5 }, gh);
   const status = calls.find((c) => c.key.includes("/statuses/"))?.body as Record<string, string>;
   assert.equal(status.state, "failure");
   assert.equal(status.context, "issue-linked");
@@ -180,14 +180,14 @@ test("a permission lookup failure for a PR author fails the status without a com
     [`POST ${API}/repos/${REPO}/statuses/sha5`]: { status: 201 },
     [`GET ${comments(5)}`]: { body: [] },
   });
-  await runGate({ name: "pull_request_target", payload: { action: "edited", number: 5 }, repo: REPO }, gh);
+  await runGate({ name: "workflow_run", payload: {}, repo: REPO, prNumber: 5 }, gh);
   const status = calls.find((c) => c.key.includes("/statuses/"))?.body as Record<string, string>;
   assert.equal(status.state, "failure");
   assert.match(status.description, /permission/);
   assert.ok(!calls.some((c) => c.key === `POST ${API}/repos/${REPO}/issues/5/comments`));
 });
 
-test("pull_request_target evaluates the API's current head SHA and body, not the payload's", async () => {
+test("a pr-event run evaluates the API's current head SHA and body, not the payload's", async () => {
   const { gh, calls } = setup({
     [`GET ${API}/repos/${REPO}/pulls/5`]: { body: { ...rawPR(5, "Closes #12"), head: { sha: "newsha" } } },
     [`GET ${API}/repos/${REPO}/collaborators/stranger/permission`]: { body: { permission: "read" } },
@@ -197,13 +197,32 @@ test("pull_request_target evaluates the API's current head SHA and body, not the
   });
   await runGate(
     {
-      name: "pull_request_target",
-      payload: { action: "synchronize", number: 5, pull_request: { body: "stale, no link", head: { sha: "oldsha" } } },
+      name: "workflow_run",
+      payload: { workflow_run: { head_sha: "oldsha", display_title: "stale, no link" } },
       repo: REPO,
+      prNumber: 5,
     },
     gh,
   );
   const status = calls.find((c) => c.key.includes("/statuses/"));
   assert.equal(status?.key, `POST ${API}/repos/${REPO}/statuses/newsha`);
   assert.equal((status?.body as { state: string }).state, "success");
+});
+
+test("a pr-event run skips a closed PR and a run without a validated number", async () => {
+  const { gh, calls } = setup({
+    [`GET ${API}/repos/${REPO}/pulls/5`]: { body: { ...rawPR(5, "No link"), state: "closed" } },
+  });
+  await runGate({ name: "workflow_run", payload: {}, repo: REPO, prNumber: 5 }, gh);
+  await runGate({ name: "workflow_run", payload: {}, repo: REPO, prNumber: null }, gh);
+  assert.deepEqual(
+    calls.map((c) => c.key),
+    [`GET ${API}/repos/${REPO}/pulls/5`],
+  );
+});
+
+test("pull_request_target is no longer handled", async () => {
+  const { gh, calls } = setup({});
+  await runGate({ name: "pull_request_target", payload: { action: "opened", number: 5 }, repo: REPO }, gh);
+  assert.equal(calls.length, 0);
 });

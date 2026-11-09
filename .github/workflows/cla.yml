@@ -1,0 +1,111 @@
+# Reusable CLA check (replaces the archived contributor-assistant action, which needs
+# pull_request_target). Callers pass workflow_run (completed runs of their `pr-event` workflow) and
+# issue_comment events; see README.md "Issue gate and CLA" for the caller files.
+# Nothing here checks out or executes the caller's code: it checks out only this repository's
+# tools and talks to the GitHub API. The `pr-event` artifact is untrusted and validated by
+# src/pr-event.ts exactly as in gate.yml.
+# It sets the commit status `cla` on the PR head, comments the signing instructions, appends
+# signatures to <signatures-path> on the <signatures-branch> branch of the calling repository
+# (created as an orphan branch when missing; no ruleset may cover it) and locks closed PRs.
+name: cla
+on:
+  workflow_call:
+    inputs:
+      tools-ref:
+        type: string
+        default: v2
+        description: Ref of capybara-hq/.github that provides the CLA scripts.
+      document-url:
+        type: string
+        required: true
+        description: Link to the CLA text shown in the instructions comment.
+      allowlist:
+        type: string
+        default: ""
+        description: Comma-separated logins that need no signature; `*` matches any characters.
+      sign-phrase:
+        type: string
+        default: I have read the CLA Document and I hereby sign the CLA
+        description: The exact comment that signs the CLA.
+      signatures-branch:
+        type: string
+        default: cla-signatures
+      signatures-path:
+        type: string
+        default: signatures/v1/cla.json
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+  statuses: write
+jobs:
+  pr:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      number: ${{ steps.resolve.outputs.number }}
+    steps:
+      # The artifact may be missing (the PR changed its pr-event workflow); the resolver then skips.
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: pr-event
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/pr-event
+      - uses: actions/checkout@v4
+        with:
+          repository: capybara-hq/.github
+          ref: ${{ inputs.tools-ref }}
+          path: .capybara-cla
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - id: resolve
+        run: node .capybara-cla/src/pr-event.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_EVENT_DIR: ${{ runner.temp }}/pr-event
+  cla:
+    needs: pr
+    # `pr` is skipped for issue_comment events, so the job opts out of the default success()
+    # condition. Comments act only on PR comments that are the signing sentence or `recheck`
+    # (src/cla/run.ts compares again, ignoring case and surrounding space).
+    if: >-
+      !cancelled() && (
+      (github.event_name == 'workflow_run' && needs.pr.outputs.number != '') ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+      (github.event.comment.body == 'recheck' || github.event.comment.body == inputs.sign-phrase)))
+    # One run at a time per PR, so a signature and a push cannot report out of order.
+    concurrency:
+      group: capybara-cla-${{ needs.pr.outputs.number || github.event.issue.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: capybara-hq/.github
+          ref: ${{ inputs.tools-ref }}
+          path: .capybara-cla
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node .capybara-cla/src/cla/run.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.pr.outputs.number }}
+          CLA_DOCUMENT_URL: ${{ inputs.document-url }}
+          CLA_ALLOWLIST: ${{ inputs.allowlist }}
+          CLA_SIGN_PHRASE: ${{ inputs.sign-phrase }}
+          CLA_BRANCH: ${{ inputs.signatures-branch }}
+          CLA_PATH: ${{ inputs.signatures-path }}

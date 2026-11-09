@@ -12,13 +12,15 @@ export type Permission = Author["permission"];
 
 export interface GitHub {
   getPR(repo: string, n: number): Promise<PR>;
+  /** The PR, or null when the repository has no PR with that number. */
+  findPR(repo: string, n: number): Promise<PR | null>;
   listOpenPRs(repo: string): AsyncIterable<PR>;
   getIssue(repo: string, n: number): Promise<IssueState | null>;
   getPermission(repo: string, login: string): Promise<Permission>;
   setStatus(
     repo: string,
     sha: string,
-    status: { state: "success" | "failure"; description: string; context: "issue-linked" },
+    status: { state: "success" | "failure"; description: string; context: "issue-linked" | "cla" },
   ): Promise<void>;
   /** Edits the comment carrying the marker, deletes it when `body` is null, creates it otherwise. */
   upsertComment(repo: string, n: number, marker: string, body: string | null): Promise<void>;
@@ -28,6 +30,34 @@ export interface GitHub {
   removeLabel(repo: string, n: number, label: string): Promise<void>;
   /** Assigns the user; returns the issue's resulting assignee logins. */
   assign(repo: string, n: number, login: string): Promise<string[]>;
+}
+
+/** A PR commit's author as the CLA check sees it: the GitHub account when there is one. */
+export type Committer = { name: string; id: number | null };
+export type IssueComment = { id: number; body: string; login: string; userId: number; createdAt: string };
+
+/** CLA calls. Separate from `GitHub` so the gate's test fakes stay small. */
+export interface ClaApi {
+  /** One entry per commit of the PR, in order (not deduplicated). */
+  listCommitters(repo: string, n: number): Promise<Committer[]>;
+  listComments(repo: string, n: number): Promise<IssueComment[]>;
+  /** The comment carrying the marker, or null. */
+  findMarkedComment(repo: string, n: number, marker: string): Promise<{ id: number; body: string } | null>;
+  editComment(repo: string, id: number, body: string): Promise<void>;
+  /** File text and blob SHA on a branch; null when the branch or the file does not exist. */
+  getBranchFile(repo: string, branch: string, path: string): Promise<{ text: string; sha: string } | null>;
+  /**
+   * Writes the file on the branch (creating the branch as an orphan when it is missing). `sha` is
+   * the blob the change is based on, null for a new file. Returns false when the file changed
+   * since that read (the caller re-reads and retries).
+   */
+  putBranchFile(
+    repo: string,
+    branch: string,
+    path: string,
+    file: { text: string; sha: string | null; message: string },
+  ): Promise<boolean>;
+  lockIssue(repo: string, n: number): Promise<void>;
 }
 
 export type Label = { name: string; color: string; description: string };
@@ -73,13 +103,44 @@ const toPR = (raw: RawPR): PR => ({
   author: { login: raw.user.login, type: raw.user.type === "Bot" ? "Bot" : "User" },
 });
 
+type GitUser = { login: string; databaseId: number } | null;
+type CommitConnection = {
+  nodes: {
+    commit: {
+      author: { name: string | null; user: GitUser } | null;
+      committer: { name: string | null; user: GitUser } | null;
+    };
+  }[];
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+};
+type CommitsPage = {
+  data?: { repository: { pullRequest: { commits: CommitConnection } } };
+  errors?: { message: string }[];
+};
+
+const COMMITS_QUERY = `query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      commits(first: 100, after: $cursor) {
+        nodes {
+          commit {
+            author { name user { login databaseId } }
+            committer { name user { login databaseId } }
+          }
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}`;
+
 const KNOWN_PERMISSIONS = ["admin", "maintain", "write", "triage", "read", "none"];
 
 export function createClient(opts: {
   token: string;
   fetch?: typeof fetch;
   apiUrl?: string;
-}): GitHub & SettingsApi {
+}): GitHub & SettingsApi & ClaApi {
   const doFetch = opts.fetch ?? fetch;
   const base = opts.apiUrl ?? "https://api.github.com";
 
@@ -135,14 +196,18 @@ export function createClient(opts: {
     }
   }
 
-  async function findComment(repo: string, n: number, marker: string): Promise<number | null> {
+  async function findMarked(repo: string, n: number, marker: string): Promise<{ id: number; body: string } | null> {
     const tag = markerOf(marker);
     for await (const c of paged<{ id: number; body?: string | null }>(
       `/repos/${repo}/issues/${n}/comments?per_page=100`,
     )) {
-      if (c.body?.includes(tag)) return c.id;
+      if (c.body?.includes(tag)) return { id: c.id, body: c.body };
     }
     return null;
+  }
+
+  async function findComment(repo: string, n: number, marker: string): Promise<number | null> {
+    return (await findMarked(repo, n, marker))?.id ?? null;
   }
 
   const decode = (f: { content?: string; encoding?: string }) =>
@@ -255,10 +320,104 @@ export function createClient(opts: {
     },
   };
 
+  const cla: ClaApi = {
+    async listCommitters(repo, n) {
+      const [owner, name] = repo.split("/");
+      const out: Committer[] = [];
+      let cursor: string | null = null;
+      do {
+        const res: CommitsPage | null = await call<CommitsPage>("POST", "/graphql", {
+          query: COMMITS_QUERY,
+          variables: { owner, name, number: n, cursor },
+        });
+        if (!res?.data || res.errors?.length) {
+          throw new Error(`GraphQL commits of ${repo}#${n} failed: ${res?.errors?.[0]?.message ?? "no data"}`);
+        }
+        const commits: CommitConnection = res.data.repository.pullRequest.commits;
+        for (const { commit } of commits.nodes) {
+          // The GitHub account behind the author, else the committer, else the git author name.
+          const user = commit.author?.user ?? commit.committer?.user ?? null;
+          if (user) out.push({ name: user.login, id: user.databaseId });
+          else out.push({ name: commit.author?.name ?? commit.committer?.name ?? "unknown", id: null });
+        }
+        cursor = commits.pageInfo.hasNextPage ? commits.pageInfo.endCursor : null;
+      } while (cursor);
+      return out;
+    },
+
+    async listComments(repo, n) {
+      const out: IssueComment[] = [];
+      for await (const c of paged<{
+        id: number;
+        body?: string | null;
+        user: { login: string; id: number } | null;
+        created_at: string;
+      }>(`/repos/${repo}/issues/${n}/comments?per_page=100`)) {
+        if (!c.user) continue;
+        out.push({ id: c.id, body: c.body ?? "", login: c.user.login, userId: c.user.id, createdAt: c.created_at });
+      }
+      return out;
+    },
+
+    findMarkedComment: findMarked,
+
+    async editComment(repo, id, body) {
+      await call("PATCH", `/repos/${repo}/issues/comments/${id}`, { body });
+    },
+
+    async getBranchFile(repo, branch, path) {
+      const f = await call<{ content?: string; encoding?: string; sha: string }>(
+        "GET",
+        `/repos/${repo}/contents/${path}?ref=${encodeURIComponent(branch)}`,
+        undefined,
+        [404],
+      );
+      return f ? { text: decode(f), sha: f.sha } : null;
+    },
+
+    async putBranchFile(repo, branch, path, file) {
+      const content = Buffer.from(file.text, "utf8").toString("base64");
+      const branchRef = await call("GET", `/repos/${repo}/git/ref/heads/${encodeURIComponent(branch)}`, undefined, [404]);
+      if (branchRef === null) {
+        // An orphan commit holding only this file, so the branch shares no history with main.
+        const blob = await call<{ sha: string }>("POST", `/repos/${repo}/git/blobs`, { content, encoding: "base64" });
+        const tree = await call<{ sha: string }>("POST", `/repos/${repo}/git/trees`, {
+          tree: [{ path, mode: "100644", type: "blob", sha: blob!.sha }],
+        });
+        const commit = await call<{ sha: string }>("POST", `/repos/${repo}/git/commits`, {
+          message: file.message,
+          tree: tree!.sha,
+          parents: [],
+        });
+        // 422: another run created the branch meanwhile; the caller re-reads and retries.
+        const ref = await call("POST", `/repos/${repo}/git/refs`, { ref: `refs/heads/${branch}`, sha: commit!.sha }, [422]);
+        return ref !== null;
+      }
+      const res = await call(
+        "PUT",
+        `/repos/${repo}/contents/${path}`,
+        { message: file.message, content, branch, ...(file.sha ? { sha: file.sha } : {}) },
+        // 409: the blob SHA is stale; 422: the file was created by another run meanwhile.
+        [409, 422],
+      );
+      return res !== null;
+    },
+
+    async lockIssue(repo, n) {
+      await call("PUT", `/repos/${repo}/issues/${n}/lock`);
+    },
+  };
+
   return {
     ...settings,
+    ...cla,
     async getPR(repo, n) {
       return toPR((await call<RawPR>("GET", `/repos/${repo}/pulls/${n}`))!);
+    },
+
+    async findPR(repo, n) {
+      const raw = await call<RawPR>("GET", `/repos/${repo}/pulls/${n}`, undefined, [404]);
+      return raw ? toPR(raw) : null;
     },
 
     async *listOpenPRs(repo) {

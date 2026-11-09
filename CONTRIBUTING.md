@@ -11,7 +11,7 @@ A repository may add its own `CONTRIBUTING.md` for specifics; it links back here
 | Pushes to | branches in `capybara-hq/<repo>` (`origin`) | branches in your fork (`origin`); `capybara-hq/<repo>` is `upstream` |
 | Starts from | anything (an issue is optional) | an issue labeled `accepted` and assigned to you |
 | Base for new branches and diffs | `origin/main` | `upstream/main` |
-| CI on your PR | runs immediately | GitHub's "approve and run" for first-time contributors |
+| CI on your PR | runs immediately | GitHub's "approve and run" for first-time contributors (also delays `issue-linked`) |
 | Merge | a maintainer approves and merges | same |
 
 Everything else is the same: a worktree per task, a design doc first for larger changes (reviewed

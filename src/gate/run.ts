@@ -1,16 +1,22 @@
 import { readFileSync } from "node:fs";
 import { createClient, type GitHub, type PR } from "../github.ts";
+import { parsePRNumber } from "../pr-event.ts";
 import { decideClaim, parseClaim } from "./claim.ts";
 import { checkIssueFormat } from "./issue-format.ts";
 import { type Author, decideIssueLinked, type IssueState } from "./issue-linked.ts";
 import { closingRefs } from "./refs.ts";
 
-type GateEvent = { name: string; payload: unknown; repo: string };
+type GateEvent = {
+  name: string;
+  payload: unknown;
+  repo: string;
+  /** For `workflow_run`: the PR number already validated by src/pr-event.ts. */
+  prNumber?: number | null;
+};
 
 // Loose view of the webhook payload fields this gate reads.
 type Payload = {
   action?: string;
-  number?: number;
   issue?: {
     number: number;
     body?: string | null;
@@ -105,10 +111,13 @@ export async function runGate(event: GateEvent, gh: GitHub): Promise<void> {
   const cache = new Map<number, Promise<IssueState | null>>();
 
   switch (event.name) {
-    case "pull_request_target": {
-      const number = payload.number;
-      if (number === undefined) throw new Error("pull_request_target payload has no number");
-      await evaluatePR(gh, repo, await gh.getPR(repo, number), cache);
+    case "workflow_run": {
+      // A completed `pr-event` run (pull_request: opened, edited, synchronize, reopened, closed).
+      // The PR is read again here: its current head and body decide, never the run's data.
+      if (event.prNumber === undefined || event.prNumber === null) return;
+      const pr = await gh.getPR(repo, event.prNumber);
+      if (pr.state !== "open") return;
+      await evaluatePR(gh, repo, pr, cache);
       return;
     }
     case "issues": {
@@ -141,5 +150,13 @@ if (import.meta.main) {
   };
   const payload: unknown = JSON.parse(readFileSync(env("GITHUB_EVENT_PATH"), "utf8"));
   const gh = createClient({ token: env("GITHUB_TOKEN") });
-  await runGate({ name: env("GITHUB_EVENT_NAME"), payload, repo: env("GITHUB_REPOSITORY") }, gh);
+  await runGate(
+    {
+      name: env("GITHUB_EVENT_NAME"),
+      payload,
+      repo: env("GITHUB_REPOSITORY"),
+      prNumber: parsePRNumber(process.env.PR_NUMBER),
+    },
+    gh,
+  );
 }
