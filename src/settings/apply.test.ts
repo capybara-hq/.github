@@ -12,7 +12,7 @@ const have = (over: Partial<Actual> = {}): Actual => ({
   rulesets: [{ id: 7, name: "protect-main", rules: [] }],
   codeowners: null,
   privateReporting: false,
-  workflows: [`uses: ${GATE_WORKFLOW}@v1`],
+  workflows: [`uses: ${GATE_WORKFLOW}@v2`],
   recentIssueLinked: 1,
   ...over,
 });

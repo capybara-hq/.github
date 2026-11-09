@@ -1,8 +1,11 @@
-# Reusable issue gate. Callers pass pull_request_target, issues and issue_comment events.
-# This workflow never checks out or executes the caller's code: it checks out only this
-# repository's tools and talks to the GitHub API.
+# Reusable issue gate. Callers pass workflow_run (completed runs of their `pr-event` workflow),
+# issues and issue_comment events; see README.md "Issue gate and CLA" for the caller files.
+# Nothing here checks out or executes the caller's code: it checks out only this repository's
+# tools and talks to the GitHub API. The `pr-event` artifact comes from a run of the PR's own copy
+# of that workflow, so it is untrusted: src/pr-event.ts accepts only a plain integer naming a PR
+# whose head is the run's head SHA, and no other run data is read.
 # Concurrency is per job, after the job `if:`, so ignored comments never supersede a run. Pending
-# runs in a group are superseded by newer ones. PR and state events share one group per number
+# runs in a group are superseded by newer ones. PR events share one group per validated PR number
 # (safe: every run reads the current PR head and body through the API, never the payload); issue
 # opened/edited format checks use their own group so a state event cannot replace them.
 name: gate
@@ -11,21 +14,67 @@ on:
     inputs:
       tools-ref:
         type: string
-        default: v1
+        default: v2
         description: Ref of capybara-hq/.github that provides the gate scripts.
 permissions:
+  actions: read
   contents: read
   issues: write
   pull-requests: write
   statuses: write
 jobs:
-  gate:
-    concurrency:
-      group: capybara-gate-${{ (github.event_name == 'issues' && (github.event.action == 'opened' || github.event.action == 'edited')) && 'format' || 'state' }}-${{ github.event.pull_request.number || github.event.issue.number }}
-      cancel-in-progress: false
-    # Only /claim comments on issues matter; other comments must not supersede a pending run.
-    if: github.event_name != 'issue_comment' || (!github.event.issue.pull_request && contains(github.event.comment.body, '/claim'))
+  pr:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      number: ${{ steps.resolve.outputs.number }}
+    steps:
+      # The artifact may be missing (the PR changed its pr-event workflow); the resolver then skips.
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: pr-event
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/pr-event
+      - uses: actions/checkout@v4
+        with:
+          repository: capybara-hq/.github
+          ref: ${{ inputs.tools-ref }}
+          path: .capybara-gate
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - id: resolve
+        run: node .capybara-gate/src/pr-event.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_EVENT_DIR: ${{ runner.temp }}/pr-event
+  gate:
+    needs: pr
+    # `pr` is skipped for issues / issue_comment events, so the job opts out of the default
+    # success() condition. Only /claim comments on issues matter; other comments must not
+    # supersede a pending run.
+    if: >-
+      !cancelled() && (
+      (github.event_name == 'workflow_run' && needs.pr.outputs.number != '') ||
+      github.event_name == 'issues' ||
+      (github.event_name == 'issue_comment' && !github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/claim')))
+    concurrency:
+      group: capybara-gate-${{ (github.event_name == 'issues' && (github.event.action == 'opened' || github.event.action == 'edited')) && 'format' || 'state' }}-${{ needs.pr.outputs.number || github.event.issue.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      statuses: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,3 +88,4 @@ jobs:
       - run: node .capybara-gate/src/gate/run.ts
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.pr.outputs.number }}

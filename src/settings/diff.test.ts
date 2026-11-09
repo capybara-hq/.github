@@ -12,7 +12,7 @@ const matching = (): Actual => ({
   rulesets: clone(want.rulesets).map((r, i) => ({ ...r, id: i + 1 })),
   codeowners: "* @capybara-hq/maintainers\n",
   privateReporting: true,
-  workflows: [`uses: ${GATE_WORKFLOW}@v1`],
+  workflows: [`uses: ${GATE_WORKFLOW}@v2`],
   recentIssueLinked: 3,
 });
 
