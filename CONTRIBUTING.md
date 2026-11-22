@@ -47,8 +47,10 @@ are shared by every repository of the organization; marking the PR ready for rev
 ## Who merges
 
 Only maintainers (`@capybara-hq/maintainers`) can merge into `main`. A PR needs the required
-statuses `ci-ok` and `issue-linked`, a branch up to date with `main`, and an approving review from
-a code owner of the latest push. If you push after an approval, it needs a new one.
+statuses `ci-ok` and `issue-linked` and an approving review from a code owner of the latest push.
+If you push after an approval, it needs a new one. The branch need not be up to date with `main`,
+only free of conflicts: the full CI run on `main` after each merge catches two PRs that break
+together.
 
 ## Local commands
 

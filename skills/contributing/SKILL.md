@@ -46,8 +46,9 @@ rules are in `AGENTS.md` and the skills for each area; read them before changing
   `/claim`; a workflow assigns them if nobody has it.
 - **No exemptions for small PRs**: typo and docs fixes also need an accepted issue.
 - **Who merges.** Only maintainers (`@capybara-hq/maintainers`) approve and merge. Merging needs
-  `ci-ok` and `issue-linked`, a branch up to date with `main`, and a code owner's approval of the
-  latest push; a push after approval needs a new approval. CI on a first-time contributor's PR
+  `ci-ok` and `issue-linked` and a code owner's approval of the latest push (the branch need not
+  be up to date with `main`, only free of conflicts: the full CI run on `main` after each merge
+  catches two PRs that break together); a push after approval needs a new approval. CI on a first-time contributor's PR
   waits until a maintainer approves the run.
 
 ## Start

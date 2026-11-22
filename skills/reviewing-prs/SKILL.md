@@ -75,7 +75,7 @@ Show the maintainer:
 ```text
 Verdict: Ready to merge | Changes needed
 
-Gates: ci-ok <state>, issue-linked <state>, up to date with main <yes/no>, approvals <state>
+Gates: ci-ok <state>, issue-linked <state>, conflicts with main <yes/no>, approvals <state>
 
 Findings:
 1. path/to/file.ts:42 — problem — suggested fix
