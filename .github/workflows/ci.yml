@@ -1,12 +1,16 @@
 name: ci
 on:
   pull_request:
+    # the default three, plus ready_for_review: a draft runs nothing until it is marked ready
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 permissions:
   contents: read
 jobs:
   ci-ok:
+    # Drafts run nothing (CONTRIBUTING.md); a draft cannot merge, so the skipped check lets nothing in.
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
