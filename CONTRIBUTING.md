@@ -41,6 +41,9 @@ There are no exemptions for small PRs: typo and docs fixes also need an accepted
 People with write access (core developers and maintainers) and the allowlisted bots
 (`github-actions[bot]`, `dependabot[bot]`, `renovate[bot]`) do not need a linked issue.
 
+Open a PR as a draft while it is still changing. CI runs nothing on drafts, and the CI runners
+are shared by every repository of the organization; marking the PR ready for review starts CI.
+
 ## Who merges
 
 Only maintainers (`@capybara-hq/maintainers`) can merge into `main`. A PR needs the required

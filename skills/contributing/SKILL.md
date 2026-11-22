@@ -116,6 +116,13 @@ update it instead of creating another.
 
    The title is the Conventional Commits subject of the change. Give the user the PR URL.
 
+   **Draft while it is still changing.** If more commits are coming before it is ready for
+   review (work in progress, waiting on another PR, a fix still being tried), add `--draft`.
+   CI runs nothing on a draft, so each push does not take the organization's shared runners;
+   when it is ready, `pnpm verify` passes and the user agrees, run
+   `gh pr ready <number> --repo capybara-hq/<repo>`, which starts CI. A draft cannot be merged.
+   A PR that is finished when it is opened is created ready, without `--draft`.
+
 ### PR body
 
 Use exactly this structure (the same as the organization's PR template):
