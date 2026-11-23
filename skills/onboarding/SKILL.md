@@ -87,7 +87,8 @@ Keep it short: a few lines per item, links rather than copies.
      not even for typo fixes. Core developers may start without an issue.
    - Start a branch in a worktree from upstream `main` (say "start on issue #N").
    - For larger changes, write the design doc first if `AGENTS.md` requires it.
-   - Run `pnpm verify` before pushing.
+   - Before pushing, run `pnpm verify --fast` (or `pnpm verify` where there is no `--fast`) and
+     the tests you touched; CI on the PR is the merge gate.
    - Open the PR with `Closes #N` (say "open a PR"); answer review (say "address review").
    - Only a maintainer approves and merges.
 4. **Something to work on**: list open, unassigned issues for newcomers, for example

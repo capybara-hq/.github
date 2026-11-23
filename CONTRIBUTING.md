@@ -15,8 +15,8 @@ A repository may add its own `CONTRIBUTING.md` for specifics; it links back here
 | Merge | a maintainer approves and merges | same |
 
 Everything else is the same: a worktree per task, a design doc first for larger changes (reviewed
-by a maintainer), Conventional Commits, changesets, `pnpm verify` before pushing, a PR using the
-template, review, changes, and merge by a maintainer.
+by a maintainer), Conventional Commits, changesets, the quick local check before pushing, a PR
+using the template, review, changes, and merge by a maintainer.
 
 ## From issue to merged PR
 
@@ -58,8 +58,14 @@ Every repository provides two `pnpm` scripts:
 
 - `pnpm doctor:env` checks your environment (tool versions, dependencies, remotes, git identity).
   `pnpm doctor:env --fix` performs only fixes that need no decision.
-- `pnpm verify` is the local equivalent of the required checks for your branch. Run it before
-  pushing. Both accept `--json` for machine-readable output.
+- `pnpm verify` runs locally what the required checks run for your branch. Both accept `--json`
+  for machine-readable output.
+
+Before pushing, run the quick local check: `pnpm verify --fast` where the repository has it (its
+`AGENTS.md` says so; otherwise `pnpm verify`), plus the tests of the files you changed. The merge
+gate is the PR's required CI statuses, which run everything your diff affects; the full
+`pnpm verify` is optional (worth it for changes across many packages or to the CI plan). When CI
+fails, run the failing test locally, fix it and push again.
 
 ## Agents are optional
 
