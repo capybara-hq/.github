@@ -2,7 +2,7 @@
   "name": "capybara-hq-dot-github",
   "private": true,
   "type": "module",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "engines": {
     "node": ">=24.2"
   },

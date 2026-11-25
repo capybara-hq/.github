@@ -62,7 +62,10 @@ Every repository provides two `pnpm` scripts:
   for machine-readable output.
 
 Before pushing, run the quick local check: `pnpm verify --fast` where the repository has it (its
-`AGENTS.md` says so; otherwise `pnpm verify`), plus the tests of the files you changed. The merge
+`AGENTS.md` says so; otherwise `pnpm verify`), plus the tests of the files you changed. Fetch
+upstream `main` first (`git fetch <upstream> main`): the quick check never fetches, and the steps
+that compare with `main` (added comment lines, commit messages, migration numbers) read the local
+ref. The merge
 gate is the PR's required CI statuses, which run everything your diff affects; the full
 `pnpm verify` is optional (worth it for changes across many packages or to the CI plan). When CI
 fails, run the failing test locally, fix it and push again.
